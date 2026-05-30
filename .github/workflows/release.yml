@@ -196,7 +196,7 @@ jobs:
 
       - name: Set RPATH for portable distribution
         run: |
-          for f in build/bin/*.so* build/bin/llama-*; do
+          for f in build/bin/*; do
             [ -f "$f" ] && ! [ -L "$f" ] || continue
             if file "$f" | grep -q 'ELF'; then
               patchelf --set-rpath '$ORIGIN' "$f"
@@ -318,8 +318,9 @@ jobs:
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          $vcRedist = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Redist\MSVC" | Sort-Object Name -Descending | Select-Object -First 1
-          Copy-Item "$($vcRedist.FullName)\debug_nonredist\${{ matrix.arch }}\Microsoft.VC143.OpenMP.LLVM\libomp140.${{ matrix.arch == 'x64' && 'x86_64' || 'aarch64' }}.dll" .\build\bin\Release\
+          $ompDll = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Redist\MSVC" -Recurse -Filter "libomp140.${{ matrix.arch == 'x64' && 'x86_64' || 'aarch64' }}.dll" | Where-Object { $_.FullName -like "*\debug_nonredist\${{ matrix.arch }}\*" } | Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $ompDll) { throw "Could not locate libomp140.${{ matrix.arch == 'x64' && 'x86_64' || 'aarch64' }}.dll under the MSVC redist directory" }
+          Copy-Item $ompDll.FullName .\build\bin\Release\
           7z a -snl llama-bin-win-cpu-${{ matrix.arch }}.zip .\build\bin\Release\*
 
       - name: Upload artifacts
