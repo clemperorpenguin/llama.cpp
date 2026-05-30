@@ -196,7 +196,7 @@ jobs:
 
       - name: Set RPATH for portable distribution
         run: |
-          for f in build/bin/*.so* build/bin/llama-*; do
+          for f in build/bin/*; do
             [ -f "$f" ] && ! [ -L "$f" ] || continue
             if file "$f" | grep -q 'ELF'; then
               patchelf --set-rpath '$ORIGIN' "$f"
