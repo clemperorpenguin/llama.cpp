@@ -534,7 +534,7 @@ jobs:
           $cudaDll = Get-ChildItem -Path $releaseDir -Filter "ggml-cuda*.dll" -ErrorAction SilentlyContinue
           if (-not $cudaDll) {
             Write-Host "##[error]ggml-cuda*.dll was NOT produced in the final package layout."
-            Write-Host "Contents of $releaseDir:"
+            Write-Host "Contents of ${releaseDir}:"
             Get-ChildItem $releaseDir | Format-Table -AutoSize
             exit 1
           }
