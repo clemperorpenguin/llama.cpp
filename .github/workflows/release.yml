@@ -11,10 +11,10 @@ on:
         type: boolean
   pull_request: # validate the release build on PRs; the release job is skipped so nothing is published
     paths:
-      # The build jobs clone llama.cpp source from upstream, so only changes to
-      # the release pipeline itself can affect the outcome. Scope PR runs to those.
+      # The build jobs clone llama.cpp source from upstream and the get-tag-name
+      # action is consumed via a pinned @lemonade ref, so only changes to this
+      # workflow itself can affect the outcome of a PR run. Scope PR runs to it.
       - '.github/workflows/release.yml'
-      - '.github/actions/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
