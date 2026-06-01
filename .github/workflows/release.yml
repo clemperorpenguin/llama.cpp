@@ -761,7 +761,12 @@ jobs:
             // is intact and can be skipped — re-runs only fill the gaps.
             const existing = new Set();
             for (const a of await github.paginate(github.rest.repos.listReleaseAssets, { owner, repo, release_id })) {
-              existing.add(a.name);
+              if (a.state === 'uploaded') {
+                existing.add(a.name);
+              } else {
+                core.warning(`deleting incomplete asset ${a.name} (${a.state})`);
+                await github.rest.repos.deleteReleaseAsset({ owner, repo, asset_id: a.id });
+              }
             }
 
             const files = fs.readdirSync('./release').filter((f) =>
