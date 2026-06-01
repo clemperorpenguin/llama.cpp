@@ -684,6 +684,15 @@ jobs:
             echo "value=$(git log -1 --pretty=%s)" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Check release artifacts
+        run: |
+          files=$(find ./release -maxdepth 1 \( -name '*.zip' -o -name '*.tar.gz' -o -name '*.tar.xz' -o -name '*.7z' \) 2>/dev/null | wc -l)
+          if [ "$files" -eq 0 ]; then
+            echo "No release artifacts found in ./release — aborting before creating a release."
+            exit 1
+          fi
+          echo "Found $files artifact(s) ready to upload."
+
       # Get the release for this tag, creating it if it does not exist yet.
       # This is idempotent: if a previous run created the release but failed
       # partway through uploading (e.g. a transient GitHub outage), re-running
@@ -810,6 +819,3 @@ jobs:
             }
 
             core.info(`Done: ${uploaded} uploaded, ${skipped} already present, ${files.length} total.`);
-            if (files.length === 0) {
-              core.setFailed('No release artifacts found to upload.');
-            }
