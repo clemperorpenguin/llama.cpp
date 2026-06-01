@@ -782,7 +782,22 @@ jobs:
               }
               const data = fs.readFileSync(`./release/${file}`);
               await withRetry(`upload ${file}`, () =>
-                github.rest.repos.uploadReleaseAsset({ owner, repo, release_id, name: file, data }));
+                github.rest.repos.uploadReleaseAsset({ owner, repo, release_id, name: file, data })
+                  .catch(async (e) => {
+                    if (e.status !== 422) throw e;
+                    const assets = await github.paginate(github.rest.repos.listReleaseAssets, { owner, repo, release_id });
+                    const asset = assets.find((a) => a.name === file);
+                    if (asset?.state === 'uploaded') {
+                      core.info(`accepting ${file} (already uploaded)`);
+                      return;
+                    }
+                    if (asset) {
+                      core.warning(`deleting conflicting asset ${file} (${asset.state})`);
+                      await github.rest.repos.deleteReleaseAsset({ owner, repo, asset_id: asset.id });
+                      throw new Error(`retrying upload for ${file} after deleting conflicting asset`);
+                    }
+                    throw e;
+                  }));
               core.info(`uploaded ${file}`);
               uploaded++;
             }
