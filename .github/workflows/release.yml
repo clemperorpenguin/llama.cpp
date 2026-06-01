@@ -684,62 +684,132 @@ jobs:
             echo "value=$(git log -1 --pretty=%s)" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Check if tag exists
-        id: check_tag
+      # Get the release for this tag, creating it if it does not exist yet.
+      # This is idempotent: if a previous run created the release but failed
+      # partway through uploading (e.g. a transient GitHub outage), re-running
+      # reuses the existing release so the upload step below can fill the gaps.
+      - name: Create or get release
+        id: release
+        uses: actions/github-script@v8
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG_NAME="${{ steps.tag.outputs.name }}"
-          if git ls-remote --tags https://github.com/${{ github.repository }}.git | grep -q "refs/tags/${TAG_NAME}$"; then
-            echo "Tag ${TAG_NAME} already exists in ${{ github.repository }}. Skipping release creation."
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "Tag ${TAG_NAME} does not exist in ${{ github.repository }}. Proceeding with release."
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create release
-        id: create_release
-        if: steps.check_tag.outputs.exists == 'false'
-        uses: ggml-org/action-create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ steps.tag.outputs.name }}
+          RELEASE_SUMMARY: ${{ steps.release_summary.outputs.value }}
         with:
-          tag_name: ${{ steps.tag.outputs.name }}
-          body: |
-            <details open>
-
-            ${{ steps.release_summary.outputs.value }}
-
-            </details>
-
-            **Linux:**
-            - [Ubuntu x64 (ROCm 7.13)](https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.name }}/llama-${{ steps.tag.outputs.name }}-bin-ubuntu-rocm-7.13-x64.tar.gz)
-            - Ubuntu x64 (CUDA): `llama-${{ steps.tag.outputs.name }}-ubuntu-cuda-sm_XX-x64.tar.xz` (replace XX with your GPU compute capability)
-
-            **Windows:**
-            - [Windows x64 (ROCm 7.13)](https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.name }}/llama-${{ steps.tag.outputs.name }}-bin-win-rocm-7.13-x64.zip)
-            - Windows x64 (CUDA): `llama-${{ steps.tag.outputs.name }}-windows-cuda-sm_XX-x64.7z` (replace XX with your GPU compute capability)
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const tag = process.env.TAG_NAME;
+            const { owner, repo } = context.repo;
+            let release;
+            try {
+              release = (await github.rest.repos.getReleaseByTag({ owner, repo, tag })).data;
+              core.info(`Reusing existing release ${tag} (id ${release.id})`);
+            } catch (e) {
+              if (e.status !== 404) throw e;
+              const body = [
+                '<details open>',
+                '',
+                process.env.RELEASE_SUMMARY,
+                '',
+                '</details>',
+                '',
+                '**Linux:**',
+                `- [Ubuntu x64 (ROCm 7.13)](https://github.com/${owner}/${repo}/releases/download/${tag}/llama-${tag}-bin-ubuntu-rocm-7.13-x64.tar.gz)`,
+                '- Ubuntu x64 (CUDA): `llama-' + tag + '-ubuntu-cuda-sm_XX-x64.tar.xz` (replace XX with your GPU compute capability)',
+                '',
+                '**Windows:**',
+                `- [Windows x64 (ROCm 7.13)](https://github.com/${owner}/${repo}/releases/download/${tag}/llama-${tag}-bin-win-rocm-7.13-x64.zip)`,
+                '- Windows x64 (CUDA): `llama-' + tag + '-windows-cuda-sm_XX-x64.7z` (replace XX with your GPU compute capability)',
+              ].join('\n');
+              try {
+                release = (await github.rest.repos.createRelease({ owner, repo, tag_name: tag, body })).data;
+                core.info(`Created release ${tag} (id ${release.id})`);
+              } catch (createError) {
+                if (createError.status !== 422) throw createError;
+                release = (await github.rest.repos.getReleaseByTag({ owner, repo, tag })).data;
+                core.info(`Reusing concurrently created release ${tag} (id ${release.id})`);
+              }
+            }
+            }
+            core.setOutput('id', release.id);
 
       - name: Upload release
         id: upload_release
-        if: steps.check_tag.outputs.exists == 'false'
         uses: actions/github-script@v8
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.id }}
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
-            const path = require('path');
             const fs = require('fs');
-            const release_id = '${{ steps.create_release.outputs.id }}';
-            for (let file of await fs.readdirSync('./release')) {
-              if (path.extname(file) === '.zip' || file.endsWith('.tar.gz') || file.endsWith('.tar.xz') || path.extname(file) === '.7z') {
-                console.log('uploadReleaseAsset', file);
-                await github.rest.repos.uploadReleaseAsset({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  release_id: release_id,
-                  name: file,
-                  data: await fs.readFileSync(`./release/${file}`)
-                });
+            const { owner, repo } = context.repo;
+            const release_id = Number(process.env.RELEASE_ID);
+
+            const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+            // Retry transient failures (network errors, 5xx, rate limits) with
+            // exponential backoff so a momentary GitHub blip does not abort the
+            // whole upload and leave the release partially populated.
+            async function withRetry(label, fn, attempts = 5) {
+              for (let i = 1; ; i++) {
+                try {
+                  return await fn();
+                } catch (e) {
+                  const transient = !e.status || e.status >= 500 || e.status === 429;
+                  if (i >= attempts || !transient) throw e;
+                  const delay = Math.min(30000, 1000 * 2 ** (i - 1));
+                  core.warning(`${label} failed (attempt ${i}/${attempts}): ${e.message}. Retrying in ${delay}ms`);
+                  await sleep(delay);
+                }
               }
+            }
+
+            // Assets already attached (from an earlier partial run). GitHub only
+            // creates an asset once its upload completes, so anything listed here
+            // is intact and can be skipped — re-runs only fill the gaps.
+            const existing = new Set();
+            for (const a of await github.paginate(github.rest.repos.listReleaseAssets, { owner, repo, release_id })) {
+              if (a.state === 'uploaded') {
+                existing.add(a.name);
+              } else {
+                core.warning(`deleting incomplete asset ${a.name} (${a.state})`);
+                await github.rest.repos.deleteReleaseAsset({ owner, repo, asset_id: a.id });
+              }
+            }
+
+            const files = fs.readdirSync('./release').filter((f) =>
+              f.endsWith('.zip') || f.endsWith('.tar.gz') || f.endsWith('.tar.xz') || f.endsWith('.7z'));
+
+            let uploaded = 0;
+            let skipped = 0;
+            for (const file of files) {
+              if (existing.has(file)) {
+                core.info(`skipping ${file} (already uploaded)`);
+                skipped++;
+                continue;
+              }
+              const data = fs.readFileSync(`./release/${file}`);
+              await withRetry(`upload ${file}`, () =>
+                github.rest.repos.uploadReleaseAsset({ owner, repo, release_id, name: file, data })
+                  .catch(async (e) => {
+                    if (e.status !== 422) throw e;
+                    const assets = await github.paginate(github.rest.repos.listReleaseAssets, { owner, repo, release_id });
+                    const asset = assets.find((a) => a.name === file);
+                    if (asset?.state === 'uploaded') {
+                      core.info(`accepting ${file} (already uploaded)`);
+                      return;
+                    }
+                    if (asset) {
+                      core.warning(`deleting conflicting asset ${file} (${asset.state})`);
+                      await github.rest.repos.deleteReleaseAsset({ owner, repo, asset_id: asset.id });
+                      throw new Error(`retrying upload for ${file} after deleting conflicting asset`);
+                    }
+                    throw e;
+                  }));
+              core.info(`uploaded ${file}`);
+              uploaded++;
+            }
+
+            core.info(`Done: ${uploaded} uploaded, ${skipped} already present, ${files.length} total.`);
+            if (files.length === 0) {
+              core.setFailed('No release artifacts found to upload.');
             }
