@@ -720,8 +720,15 @@ jobs:
                 `- [Windows x64 (ROCm 7.13)](https://github.com/${owner}/${repo}/releases/download/${tag}/llama-${tag}-bin-win-rocm-7.13-x64.zip)`,
                 '- Windows x64 (CUDA): `llama-' + tag + '-windows-cuda-sm_XX-x64.7z` (replace XX with your GPU compute capability)',
               ].join('\n');
-              release = (await github.rest.repos.createRelease({ owner, repo, tag_name: tag, body })).data;
-              core.info(`Created release ${tag} (id ${release.id})`);
+              try {
+                release = (await github.rest.repos.createRelease({ owner, repo, tag_name: tag, body })).data;
+                core.info(`Created release ${tag} (id ${release.id})`);
+              } catch (createError) {
+                if (createError.status !== 422) throw createError;
+                release = (await github.rest.repos.getReleaseByTag({ owner, repo, tag })).data;
+                core.info(`Reusing concurrently created release ${tag} (id ${release.id})`);
+              }
+            }
             }
             core.setOutput('id', release.id);
 
