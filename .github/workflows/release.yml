@@ -259,11 +259,23 @@ jobs:
             fi
           done
 
+      - name: Determine tag name
+        id: tag
+        uses: lemonade-sdk/llama.cpp/.github/actions/get-tag-name@lemonade
+
       - name: Pack artifacts
         id: pack_artifacts
         run: |
           cp LICENSE ./build/bin/
-          tar -cJf llama-ubuntu-cuda-${{ matrix.sm }}-x64.tar.xz -C ./build/bin .
+          # Stage into a versioned top-level directory so extraction lands in a
+          # single llama-<tag>/ folder, matching the ROCm Linux tarball layout.
+          # Build the directory explicitly rather than via tar --transform, which
+          # only rewrites paths when tar preserves the leading ./ on members and
+          # so behaves differently across tar versions/runners.
+          pkgdir="llama-${{ steps.tag.outputs.name }}"
+          mkdir -p "$pkgdir"
+          cp -a build/bin/. "$pkgdir/"
+          tar -cJf llama-ubuntu-cuda-${{ matrix.sm }}-x64.tar.xz "$pkgdir"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
@@ -405,11 +417,23 @@ jobs:
             fi
           done
 
+      - name: Determine tag name
+        id: tag
+        uses: lemonade-sdk/llama.cpp/.github/actions/get-tag-name@lemonade
+
       - name: Pack artifacts
         id: pack_artifacts
         run: |
           cp LICENSE ./build/bin/
-          tar -cJf llama-ubuntu-cuda-${{ matrix.sm }}-arm64.tar.xz -C ./build/bin .
+          # Stage into a versioned top-level directory so extraction lands in a
+          # single llama-<tag>/ folder, matching the ROCm Linux tarball layout.
+          # Build the directory explicitly rather than via tar --transform, which
+          # only rewrites paths when tar preserves the leading ./ on members and
+          # so behaves differently across tar versions/runners.
+          pkgdir="llama-${{ steps.tag.outputs.name }}"
+          mkdir -p "$pkgdir"
+          cp -a build/bin/. "$pkgdir/"
+          tar -cJf llama-ubuntu-cuda-${{ matrix.sm }}-arm64.tar.xz "$pkgdir"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
