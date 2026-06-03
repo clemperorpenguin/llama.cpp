@@ -891,6 +891,7 @@ jobs:
                 '**Linux:**',
                 `- [Ubuntu x64 (ROCm 7.13)](https://github.com/${owner}/${repo}/releases/download/${tag}/llama-${tag}-bin-ubuntu-rocm-7.13-x64.tar.gz)`,
                 '- Ubuntu x64 (CUDA): `llama-' + tag + '-ubuntu-cuda-sm_XX-x64.tar.xz` (replace XX with your GPU compute capability)',
+                '- Ubuntu arm64 (CUDA): `llama-' + tag + '-ubuntu-cuda-sm_XX-arm64.tar.xz` (replace XX with your GPU compute capability)',
                 '',
                 '**Windows:**',
                 `- [Windows x64 (ROCm 7.13)](https://github.com/${owner}/${repo}/releases/download/${tag}/llama-${tag}-bin-win-rocm-7.13-x64.zip)`,
@@ -904,7 +905,6 @@ jobs:
                 release = (await github.rest.repos.getReleaseByTag({ owner, repo, tag })).data;
                 core.info(`Reusing concurrently created release ${tag} (id ${release.id})`);
               }
-            }
             }
             core.setOutput('id', release.id);
 
