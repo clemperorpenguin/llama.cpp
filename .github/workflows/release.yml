@@ -446,9 +446,7 @@ jobs:
 
     env:
       OPENVINO_VERSION_MAJOR: "2026.0"
-      # Find the exact full version at:
-      # https://storage.openvinotoolkit.org/repositories/openvino/packages/2026.0/linux/
-      OPENVINO_VERSION_FULL: "2026.0.0.0.dev20260101000000"
+      OPENVINO_VERSION_FULL: "2026.0.0.20965.c6d6a13a886"
 
     steps:
       - name: Clone
@@ -465,7 +463,10 @@ jobs:
           evict-old-files: 1d
 
       - name: Dependencies
-        run: sudo apt-get install -y build-essential cmake patchelf
+        run: |
+          sudo apt-get install -y build-essential cmake ninja-build patchelf \
+            python3-pip libtbb12 \
+            ocl-icd-opencl-dev opencl-headers opencl-clhpp-headers intel-opencl-icd
 
       - name: Setup OpenVINO
         uses: lemonade-sdk/llama.cpp/.github/actions/linux-setup-openvino@lemonade
@@ -473,6 +474,11 @@ jobs:
           path: ${{ github.workspace }}/openvino
           version_major: ${{ env.OPENVINO_VERSION_MAJOR }}
           version_full: ${{ env.OPENVINO_VERSION_FULL }}
+
+      - name: Install OpenVINO dependencies
+        run: |
+          chmod +x ${{ github.workspace }}/openvino/install_dependencies/install_openvino_dependencies.sh
+          echo "Y" | sudo -E ${{ github.workspace }}/openvino/install_dependencies/install_openvino_dependencies.sh
 
       - name: Build
         run: |
