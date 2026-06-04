@@ -441,8 +441,8 @@ jobs:
           path: llama-ubuntu-cuda-${{ matrix.sm }}-arm64.tar.xz
           name: llama-ubuntu-cuda-${{ matrix.sm }}-arm64.tar.xz
 
-  ubuntu-24-openvino:
-    runs-on: ubuntu-24.04
+  ubuntu-22-openvino:
+    runs-on: ubuntu-22.04
 
     env:
       OPENVINO_VERSION_MAJOR: "2026.0"
@@ -902,7 +902,7 @@ jobs:
       - ubuntu-22-rocm
       - ubuntu-22-cuda
       - ubuntu-22-cuda-arm64
-      - ubuntu-24-openvino
+      - ubuntu-22-openvino
 
     steps:
       - name: Clone
