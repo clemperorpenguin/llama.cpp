@@ -502,10 +502,6 @@ jobs:
           # Core runtime and all plugins
           cp -av "$OV_LIBDIR"/libopenvino*.so* build/bin/
 
-          # Plugin registry — rewrite to basename-only paths so plugins load from $ORIGIN
-          cp -av "$OV_LIBDIR/plugins.xml" build/bin/
-          sed -i 's|location="[^"]*/\([^/"]*\.so\)"|location="\1"|g' build/bin/plugins.xml
-
           # TBB threading library bundled with OpenVINO
           TBB_DIR="${{ github.workspace }}/openvino/runtime/3rdparty/tbb/lib"
           if [ -d "$TBB_DIR" ]; then
