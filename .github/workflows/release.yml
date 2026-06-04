@@ -502,10 +502,11 @@ jobs:
           # Core runtime and all plugins
           cp -av "$OV_LIBDIR"/libopenvino*.so* build/bin/
 
-          # TBB threading library bundled with OpenVINO
+          # TBB threading library bundled with OpenVINO (skip libtbbbind — needs libhwloc)
           TBB_DIR="${{ github.workspace }}/openvino/runtime/3rdparty/tbb/lib"
           if [ -d "$TBB_DIR" ]; then
-            cp -av "$TBB_DIR"/libtbb*.so* build/bin/
+            cp -av "$TBB_DIR"/libtbb.so* build/bin/
+            cp -av "$TBB_DIR"/libtbbmalloc.so* build/bin/
           fi
 
       - name: Set RPATH for portable distribution
