@@ -993,13 +993,39 @@ jobs:
           fi
 
       - name: Check release artifacts
+        env:
+          TAG: ${{ steps.tag.outputs.name }}
         run: |
-          files=$(find ./release -maxdepth 1 \( -name '*.zip' -o -name '*.tar.gz' -o -name '*.tar.xz' -o -name '*.7z' \) 2>/dev/null | wc -l)
-          if [ "$files" -eq 0 ]; then
-            echo "No release artifacts found in ./release — aborting before creating a release."
+          missing=0
+
+          check_glob() {
+            local pattern="$1"
+            if ! ls $pattern >/dev/null 2>&1; then
+              echo "::error::Missing artifact: $pattern"
+              missing=$((missing + 1))
+            fi
+          }
+
+          # Verify all CUDA SM variants are present for each platform
+          for sm in sm_75 sm_80 sm_86 sm_89 sm_90 sm_100 sm_120; do
+            check_glob "release/llama-${TAG}-ubuntu-cuda-${sm}-x64.tar.xz"
+            check_glob "release/llama-${TAG}-ubuntu-cuda-${sm}-arm64.tar.xz"
+            check_glob "release/llama-${TAG}-windows-cuda-${sm}-x64.7z"
+          done
+
+          # Verify non-CUDA platform artifacts are present
+          check_glob "release/llama-${TAG}-bin-ubuntu-rocm-*-x64.tar.gz"
+          check_glob "release/llama-${TAG}-bin-ubuntu-openvino-*-x64.tar.gz"
+          check_glob "release/llama-${TAG}-bin-win-rocm-*-x64.zip"
+          check_glob "release/llama-${TAG}-bin-win-cpu-x64.zip"
+
+          if [ "$missing" -gt 0 ]; then
+            echo "::error::$missing artifact(s) missing — aborting before creating a release."
             exit 1
           fi
-          echo "Found $files artifact(s) ready to upload."
+
+          files=$(find ./release -maxdepth 1 \( -name '*.zip' -o -name '*.tar.gz' -o -name '*.tar.xz' -o -name '*.7z' \) 2>/dev/null | wc -l)
+          echo "All expected artifacts present. Found $files artifact(s) ready to upload."
 
       # Get the release for this tag, creating it if it does not exist yet.
       # This is idempotent: if a previous run created the release but failed
