@@ -625,8 +625,9 @@ jobs:
       - name: Pack artifacts
         id: pack_artifacts
         run: |
-          $ompDll = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Redist\MSVC" -Recurse -Filter "libomp140.${{ matrix.arch == 'x64' && 'x86_64' || 'aarch64' }}.dll" | Where-Object { $_.FullName -like "*\debug_nonredist\${{ matrix.arch }}\*" } | Sort-Object FullName -Descending | Select-Object -First 1
-          if (-not $ompDll) { throw "Could not locate libomp140.${{ matrix.arch == 'x64' && 'x86_64' || 'aarch64' }}.dll under the MSVC redist directory" }
+          $archSuffix = '${{ matrix.arch }}' -eq 'x64' ? 'x86_64' : 'aarch64'
+          $ompDll = Get-ChildItem "C:\Program Files\Microsoft Visual Studio" -Recurse -Filter "libomp140.$archSuffix.dll" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like "*\debug_nonredist\${{ matrix.arch }}\*" } | Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $ompDll) { throw "Could not locate libomp140.$archSuffix.dll under the MSVC redist directory" }
           Copy-Item $ompDll.FullName .\build\bin\Release\
           7z a -snl llama-bin-win-cpu-${{ matrix.arch }}.zip .\build\bin\Release\*
 
