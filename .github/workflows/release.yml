@@ -624,9 +624,25 @@ jobs:
 
       - name: Pack artifacts
         id: pack_artifacts
+        shell: pwsh
         run: |
-          $ompDll = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Redist\MSVC" -Recurse -Filter "libomp140.${{ matrix.arch == 'x64' && 'x86_64' || 'aarch64' }}.dll" | Where-Object { $_.FullName -like "*\debug_nonredist\${{ matrix.arch }}\*" } | Sort-Object FullName -Descending | Select-Object -First 1
-          if (-not $ompDll) { throw "Could not locate libomp140.${{ matrix.arch == 'x64' && 'x86_64' || 'aarch64' }}.dll under the MSVC redist directory" }
+          $archSuffix = if ('${{ matrix.arch }}' -eq 'x64') { 'x86_64' } else { 'aarch64' }
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+          $searchRoots = @()
+          if (Test-Path $vswhere) {
+            $searchRoots += & $vswhere -all -products * -property installationPath 2>$null |
+              ForEach-Object { Join-Path $_ "VC\Redist\MSVC" } |
+              Where-Object { Test-Path $_ }
+          }
+          if (-not $searchRoots) {
+            $searchRoots = @("C:\Program Files\Microsoft Visual Studio", "${env:ProgramFiles(x86)}\Microsoft Visual Studio")
+          }
+          $ompDll = $searchRoots |
+            ForEach-Object { Get-ChildItem $_ -Recurse -File -Filter "libomp140.$archSuffix.dll" -ErrorAction SilentlyContinue } |
+            Where-Object { $_.FullName -like "*\debug_nonredist\${{ matrix.arch }}\*" } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if (-not $ompDll) { throw "Could not locate libomp140.$archSuffix.dll under: $($searchRoots -join ', ')" }
           Copy-Item $ompDll.FullName .\build\bin\Release\
           7z a -snl llama-bin-win-cpu-${{ matrix.arch }}.zip .\build\bin\Release\*
 
