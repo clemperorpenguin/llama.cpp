@@ -133,7 +133,7 @@ jobs:
       matrix:
         # On PRs only build one representative arch (packaging logic is identical
         # across all sm_*); build the full matrix on schedule/dispatch.
-        sm: ${{ github.event_name == 'pull_request' && fromJSON('["sm_89"]') || fromJSON('["sm_75", "sm_80", "sm_86", "sm_89", "sm_90", "sm_100", "sm_120"]') }}
+        sm: ${{ github.event_name == 'pull_request' && fromJSON('["sm_89"]') || fromJSON('["sm_75", "sm_80", "sm_86", "sm_89", "sm_90", "sm_100", "sm_120", "sm_121"]') }}
 
     steps:
       - name: Clone
@@ -291,7 +291,7 @@ jobs:
       matrix:
         # On PRs only build one representative arch (packaging logic is identical
         # across all sm_*); build the full matrix on schedule/dispatch.
-        sm: ${{ github.event_name == 'pull_request' && fromJSON('["sm_89"]') || fromJSON('["sm_75", "sm_80", "sm_86", "sm_89", "sm_90", "sm_100", "sm_120"]') }}
+        sm: ${{ github.event_name == 'pull_request' && fromJSON('["sm_89"]') || fromJSON('["sm_75", "sm_80", "sm_86", "sm_89", "sm_90", "sm_100", "sm_120", "sm_121"]') }}
 
     steps:
       - name: Clone
@@ -752,7 +752,7 @@ jobs:
       matrix:
         # On PRs only build one representative arch (packaging logic is identical
         # across all sm_*); build the full matrix on schedule/dispatch.
-        sm: ${{ github.event_name == 'pull_request' && fromJSON('["sm_89"]') || fromJSON('["sm_75", "sm_80", "sm_86", "sm_89", "sm_90", "sm_100", "sm_120"]') }}
+        sm: ${{ github.event_name == 'pull_request' && fromJSON('["sm_89"]') || fromJSON('["sm_75", "sm_80", "sm_86", "sm_89", "sm_90", "sm_100", "sm_120", "sm_121"]') }}
 
     steps:
       - name: Clone
