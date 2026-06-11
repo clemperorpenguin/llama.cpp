@@ -627,11 +627,22 @@ jobs:
         shell: pwsh
         run: |
           $archSuffix = if ('${{ matrix.arch }}' -eq 'x64') { 'x86_64' } else { 'aarch64' }
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $vsInstall = if (Test-Path $vswhere) { & $vswhere -latest -property installationPath 2>$null } else { $null }
-          $searchRoot = if ($vsInstall -and (Test-Path "$vsInstall\VC\Redist\MSVC")) { "$vsInstall\VC\Redist\MSVC" } else { "C:\Program Files\Microsoft Visual Studio" }
-          $ompDll = Get-ChildItem $searchRoot -Recurse -Filter "libomp140.$archSuffix.dll" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like "*\debug_nonredist\${{ matrix.arch }}\*" } | Sort-Object FullName -Descending | Select-Object -First 1
-          if (-not $ompDll) { throw "Could not locate libomp140.$archSuffix.dll under $searchRoot" }
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+          $searchRoots = @()
+          if (Test-Path $vswhere) {
+            $searchRoots += & $vswhere -all -products * -property installationPath 2>$null |
+              ForEach-Object { Join-Path $_ "VC\Redist\MSVC" } |
+              Where-Object { Test-Path $_ }
+          }
+          if (-not $searchRoots) {
+            $searchRoots = @("C:\Program Files\Microsoft Visual Studio", "${env:ProgramFiles(x86)}\Microsoft Visual Studio")
+          }
+          $ompDll = $searchRoots |
+            ForEach-Object { Get-ChildItem $_ -Recurse -File -Filter "libomp140.$archSuffix.dll" -ErrorAction SilentlyContinue } |
+            Where-Object { $_.FullName -like "*\debug_nonredist\${{ matrix.arch }}\*" } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if (-not $ompDll) { throw "Could not locate libomp140.$archSuffix.dll under: $($searchRoots -join ', ')" }
           Copy-Item $ompDll.FullName .\build\bin\Release\
           7z a -snl llama-bin-win-cpu-${{ matrix.arch }}.zip .\build\bin\Release\*
 
