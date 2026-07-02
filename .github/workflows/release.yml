@@ -999,6 +999,16 @@ jobs:
         run: |
           declare -A missing_by_family=()
 
+          # Glob that matches every artifact belonging to a family, used to
+          # drop the whole family if any piece of it is missing. Must not
+          # overlap with any other family's files.
+          declare -A family_glob=(
+            [cuda]="release/llama-${TAG}-*cuda-sm_*"
+            [rocm]="release/llama-${TAG}-bin-*rocm-*"
+            [openvino]="release/llama-${TAG}-bin-*openvino-*"
+            [cpu]="release/llama-${TAG}-bin-win-cpu-*"
+          )
+
           check_glob() {
             local family="$1" pattern="$2"
             if ! ls $pattern >/dev/null 2>&1; then
@@ -1007,9 +1017,12 @@ jobs:
             fi
           }
 
-          # Each backend family is checked independently: a gap in one family
-          # (e.g. a single failed CUDA sm_* build) must not block the release
-          # of artifacts from families that built successfully.
+          # Each backend family is checked independently, but must be
+          # published as a complete, internally-consistent set across every
+          # platform/variant it covers (e.g. all 7 CUDA sm_* builds for
+          # ubuntu x64/arm64 and windows) — never a partial mix. A gap in one
+          # family drops that whole family from the release; other families
+          # are unaffected.
           for sm in sm_75 sm_80 sm_86 sm_89 sm_90 sm_100 sm_120; do
             check_glob cuda "release/llama-${TAG}-ubuntu-cuda-${sm}-x64.tar.xz"
             check_glob cuda "release/llama-${TAG}-ubuntu-cuda-${sm}-arm64.tar.xz"
@@ -1024,9 +1037,11 @@ jobs:
           missing=0
           summary=""
           for family in "${!missing_by_family[@]}"; do
-            echo "::warning::$family family is missing ${missing_by_family[$family]} artifact(s) — publishing the other families anyway."
-            missing=$((missing + missing_by_family[$family]))
-            summary="${summary}${summary:+, }${family}: ${missing_by_family[$family]} missing"
+            count=${missing_by_family[$family]}
+            echo "::warning::$family family is incomplete ($count artifact(s) missing) — dropping all $family artifacts from this release."
+            rm -fv ${family_glob[$family]} 2>/dev/null || true
+            missing=$((missing + count))
+            summary="${summary}${summary:+, }${family}: $count missing, family dropped"
           done
           echo "missing=$missing" >> "$GITHUB_OUTPUT"
           echo "summary=$summary" >> "$GITHUB_OUTPUT"
@@ -1040,7 +1055,7 @@ jobs:
           fi
 
           if [ "$missing" -gt 0 ]; then
-            echo "$missing artifact(s) missing ($summary) — continuing to publish the $files artifact(s) that did build. The job will still fail below so the gap gets noticed."
+            echo "$missing artifact(s) missing ($summary) — continuing to publish the $files artifact(s) from complete families. The job will still fail below so the gap gets noticed."
           else
             echo "All expected artifacts present. Found $files artifact(s) ready to upload."
           fi
@@ -1176,5 +1191,5 @@ jobs:
       - name: Fail if any artifacts were missing
         if: steps.check_artifacts.outputs.missing != '0'
         run: |
-          echo "::error::${{ steps.check_artifacts.outputs.missing }} artifact(s) were missing (${{ steps.check_artifacts.outputs.summary }}) — the artifacts that did build were still published, see the 'Check release artifacts' step for the full per-file list."
+          echo "::error::${{ steps.check_artifacts.outputs.missing }} artifact(s) were missing (${{ steps.check_artifacts.outputs.summary }}) — the incomplete families were dropped from this release; other families were still published. See the 'Check release artifacts' step for the full per-file list."
           exit 1
