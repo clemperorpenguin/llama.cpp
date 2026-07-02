@@ -632,6 +632,7 @@ jobs:
               -DGGML_BACKEND_DL=ON \
               -DGGML_CPU_ALL_VARIANTS=${{ matrix.cpu_variants }} \
               -DGGML_OPENMP=OFF \
+              -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON \
               -DCMAKE_EXE_LINKER_FLAGS="-static-libgcc -static-libstdc++" \
               -DCMAKE_SHARED_LINKER_FLAGS="-static-libgcc -static-libstdc++" \
               ${{ env.CMAKE_ARGS }}
@@ -691,6 +692,7 @@ jobs:
               -DGGML_CPU_ALL_VARIANTS=${{ matrix.cpu_variants }} \
               -DGGML_OPENMP=OFF \
               -DGGML_VULKAN=ON \
+              -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON \
               -DCMAKE_EXE_LINKER_FLAGS="-static-libgcc -static-libstdc++" \
               -DCMAKE_SHARED_LINKER_FLAGS="-static-libgcc -static-libstdc++" \
               ${{ env.CMAKE_ARGS }}
