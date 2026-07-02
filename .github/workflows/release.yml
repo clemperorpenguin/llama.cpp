@@ -883,7 +883,12 @@ jobs:
           name: llama-windows-cuda-${{ matrix.sm }}-x64.7z
 
   release:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.create_release == 'true' }}
+    # always() overrides the default behavior of skipping this job when a
+    # needed build job fails or is skipped (e.g. one CUDA sm_* matrix leg
+    # fails, or windows-cuda gets skipped because windows-cpu failed). The
+    # job must still run so the per-family checks below can decide what's
+    # actually complete and safe to publish.
+    if: ${{ always() && (github.event_name == 'schedule' || github.event.inputs.create_release == 'true') }}
 
     # Fine-grant permission
     # https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication#modifying-the-permissions-for-the-github_token
@@ -925,12 +930,21 @@ jobs:
         run: |
           mkdir -p release
 
+          # Windows CPU is a hard prerequisite for every Windows zip-based
+          # artifact (its binaries get merged into e.g. the ROCm zip below),
+          # not just its own "cpu" family. If it's missing, none of those
+          # zips can be completed, so skip moving any of them into release/
+          # rather than hard-failing the whole job — Ubuntu/CUDA artifacts
+          # below are unaffected, and the completeness check further down
+          # will see the missing files and drop the cpu/rocm families.
           echo "Adding CPU backend files to Windows ZIP archives..."
+          cpu_zip_available=true
           for arch in x64; do
             cpu_zip="artifact/llama-bin-win-cpu-${arch}.zip"
             if [ ! -f "$cpu_zip" ]; then
-              echo "::error::Missing required CPU artifact $cpu_zip"
-              exit 1
+              echo "::warning::Missing CPU artifact $cpu_zip — Windows zip-based artifacts (cpu, rocm) cannot be completed and will be dropped by the completeness check below."
+              cpu_zip_available=false
+              continue
             fi
             temp_dir=$(mktemp -d)
             echo "Extracting CPU backend for $arch..."
@@ -949,13 +963,17 @@ jobs:
             rm -rf "$temp_dir"
           done
 
-          echo "Renaming and moving zips to release..."
-          for zip_file in artifact/llama-bin-win-*.zip; do
-            base_name=$(basename "$zip_file" .zip)
-            zip_name="llama-${{ steps.tag.outputs.name }}-${base_name#llama-}.zip"
-            echo "Moving $zip_file to release/$zip_name"
-            mv "$zip_file" "release/$zip_name"
-          done
+          if [ "$cpu_zip_available" = true ]; then
+            echo "Renaming and moving zips to release..."
+            for zip_file in artifact/llama-bin-win-*.zip; do
+              base_name=$(basename "$zip_file" .zip)
+              zip_name="llama-${{ steps.tag.outputs.name }}-${base_name#llama-}.zip"
+              echo "Moving $zip_file to release/$zip_name"
+              mv "$zip_file" "release/$zip_name"
+            done
+          else
+            echo "Skipping Windows zip artifacts (cpu, rocm) — CPU backend was unavailable to merge into them."
+          fi
 
           echo "Renaming and moving tar.gz files to release..."
           for tar_file in artifact/*.tar.gz; do
