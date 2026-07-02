@@ -669,7 +669,7 @@ jobs:
         run: |
           docker run --rm -v "$PWD:/src" -w /src alpine:latest sh -euxc '
             apk add --no-cache build-base cmake git linux-headers \
-              vulkan-loader-dev vulkan-headers glslang shaderc spirv-tools
+              vulkan-loader-dev vulkan-headers glslang shaderc spirv-tools spirv-headers
             cmake -B build -S . \
               -DCMAKE_BUILD_TYPE=Release \
               -DGGML_NATIVE=OFF \
