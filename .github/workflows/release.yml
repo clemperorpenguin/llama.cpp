@@ -977,6 +977,7 @@ jobs:
 
           echo "Renaming and moving tar.gz files to release..."
           for tar_file in artifact/*.tar.gz; do
+            [ -f "$tar_file" ] || continue
             base_name=$(basename "$tar_file" .tar.gz)
             tar_name="llama-${{ steps.tag.outputs.name }}-${base_name#llama-}.tar.gz"
             echo "Moving $tar_file to release/$tar_name"
