@@ -9,6 +9,11 @@ on:
         description: 'Create new release'
         required: true
         type: boolean
+      llama_ref:
+        description: 'Upstream ggml-org/llama.cpp tag to build (must match lemonade backend_versions.json)'
+        required: false
+        default: 'b9747'
+        type: string
   pull_request: # validate the release build on PRs; the release job is skipped so nothing is published
     paths:
       # The build jobs clone llama.cpp source from upstream and the get-tag-name
@@ -23,6 +28,9 @@ concurrency:
 env:
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   CMAKE_ARGS: "-DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_TOOLS=ON -DLLAMA_BUILD_SERVER=ON -DGGML_RPC=ON"
+  # Upstream tag every job checks out. Pinned so get-tag-name (b<commit-count>)
+  # emits this version and the release matches lemonade's backend_versions.json.
+  LLAMA_REF: ${{ github.event.inputs.llama_ref || 'b9747' }}
 
 jobs:
   ubuntu-22-rocm:
@@ -42,6 +50,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: 'ggml-org/llama.cpp'
+          ref: ${{ env.LLAMA_REF }}
 
       - name: ccache
         uses: ggml-org/ccache-action@v1.2.21
@@ -142,6 +151,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: 'ggml-org/llama.cpp'
+          ref: ${{ env.LLAMA_REF }}
 
       - name: ccache
         uses: ggml-org/ccache-action@v1.2.21
@@ -300,6 +310,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: 'ggml-org/llama.cpp'
+          ref: ${{ env.LLAMA_REF }}
 
       - name: ccache
         uses: ggml-org/ccache-action@v1.2.21
@@ -455,6 +466,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: 'ggml-org/llama.cpp'
+          ref: ${{ env.LLAMA_REF }}
 
       - name: ccache
         uses: ggml-org/ccache-action@v1.2.21
@@ -608,6 +620,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: 'ggml-org/llama.cpp'
+          ref: ${{ env.LLAMA_REF }}
 
       - name: Build (Alpine / musl)
         run: |
@@ -664,6 +677,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: 'ggml-org/llama.cpp'
+          ref: ${{ env.LLAMA_REF }}
 
       - name: Build (Alpine / musl)
         run: |
@@ -714,6 +728,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: 'ggml-org/llama.cpp'
+          ref: ${{ env.LLAMA_REF }}
 
       - name: ccache
         uses: ggml-org/ccache-action@v1.2.21
@@ -787,6 +802,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: 'ggml-org/llama.cpp'
+          ref: ${{ env.LLAMA_REF }}
 
       - name: Cache ROCm Installation
         id: cache-rocm
@@ -895,6 +911,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: 'ggml-org/llama.cpp'
+          ref: ${{ env.LLAMA_REF }}
 
       - name: Install CUDA Toolkit
         uses: Jimver/cuda-toolkit@v0.2.35
@@ -1044,6 +1061,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: 'ggml-org/llama.cpp'
+          ref: ${{ env.LLAMA_REF }}
 
       - name: Determine tag name
         id: tag
