@@ -28,9 +28,12 @@ concurrency:
 env:
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   CMAKE_ARGS: "-DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_TOOLS=ON -DLLAMA_BUILD_SERVER=ON -DGGML_RPC=ON"
-  # Upstream tag every job checks out. Pinned so get-tag-name (b<commit-count>)
-  # emits this version and the release matches lemonade's backend_versions.json.
-  LLAMA_REF: ${{ github.event.inputs.llama_ref || 'b9747' }}
+  # Upstream ref every job checks out. Empty on schedule/PR (no inputs) so
+  # actions/checkout uses ggml-org's default branch = latest — this preserves the
+  # fork's original "track upstream" nightly behavior. A manual dispatch defaults
+  # to the llama_ref input (b9747) so a deliberate build matches lemonade's
+  # backend_versions.json pin.
+  LLAMA_REF: ${{ github.event.inputs.llama_ref }}
 
 jobs:
   ubuntu-22-rocm:
