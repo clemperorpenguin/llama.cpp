@@ -339,6 +339,141 @@ jobs:
           path: llama-${{ steps.tag.outputs.name }}-bin-ubuntu-vulkan-${{ matrix.build }}.tar.gz
           name: llama-bin-ubuntu-vulkan-${{ matrix.build }}.tar.gz
 
+  musl-cpu:
+    needs: [check-release, get-version]
+    if: ${{ needs.check-release.outputs.should_release == 'true' }}
+
+    strategy:
+      matrix:
+        include:
+          - build: 'x64'
+            os: ubuntu-24.04
+          - build: 'arm64'
+            os: ubuntu-24.04-arm
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Clone
+        id: checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # the ubuntu artifacts need glibc, so build in Alpine to link musl instead.
+      # libgcc/libstdc++ are static and OpenMP is off, because Alpine ships those
+      # in separate packages that a minimal target may not have
+      - name: Build
+        id: cmake_build
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src alpine:3.24 sh -euxc '
+            apk add --no-cache build-base cmake git linux-headers openssl-dev nodejs npm
+
+            # the workspace belongs to the runner user, not to root in here
+            git config --global --add safe.directory /src
+
+            cmake -B build \
+              -DCMAKE_INSTALL_RPATH="\$ORIGIN" \
+              -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
+              -DCMAKE_EXE_LINKER_FLAGS="-static-libgcc -static-libstdc++" \
+              -DCMAKE_SHARED_LINKER_FLAGS="-static-libgcc -static-libstdc++" \
+              -DCMAKE_MODULE_LINKER_FLAGS="-static-libgcc -static-libstdc++" \
+              -DGGML_BACKEND_DL=ON \
+              -DGGML_NATIVE=OFF \
+              -DGGML_CPU_ALL_VARIANTS=ON \
+              -DGGML_OPENMP=OFF \
+              -DHF_UI_VERSION=${{ needs.get-version.outputs.ui_version }} \
+              ${{ env.CMAKE_ARGS }}
+            cmake --build build --config Release -j $(nproc)
+
+            # root wrote the build tree, let the runner user pack it
+            chmod -R a+rwX build
+          '
+
+      - name: Determine tag name
+        id: tag
+        uses: ./.github/actions/get-tag-name
+
+      - name: Pack artifacts
+        id: pack_artifacts
+        run: |
+          cp LICENSE ./build/bin/
+          tar -czvf llama-${{ steps.tag.outputs.name }}-bin-musl-${{ matrix.build }}.tar.gz --transform "s,^\.,llama-${{ steps.tag.outputs.name }}," -C ./build/bin .
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          path: llama-${{ steps.tag.outputs.name }}-bin-musl-${{ matrix.build }}.tar.gz
+          name: llama-bin-musl-${{ matrix.build }}.tar.gz
+
+  musl-vulkan:
+    needs: [check-release, get-version]
+    if: ${{ needs.check-release.outputs.should_release == 'true' }}
+
+    strategy:
+      matrix:
+        include:
+          - build: 'x64'
+            os: ubuntu-24.04
+          - build: 'arm64'
+            os: ubuntu-24.04-arm
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Clone
+        id: checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # same as musl-cpu, plus the Vulkan loader and a GLSL compiler.
+      # the target still needs vulkan-loader and a driver installed
+      - name: Build
+        id: cmake_build
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src alpine:3.24 sh -euxc '
+            apk add --no-cache build-base cmake git linux-headers openssl-dev nodejs npm \
+              vulkan-loader-dev vulkan-headers glslang shaderc spirv-tools spirv-headers
+
+            # the workspace belongs to the runner user, not to root in here
+            git config --global --add safe.directory /src
+
+            cmake -B build \
+              -DCMAKE_INSTALL_RPATH="\$ORIGIN" \
+              -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
+              -DCMAKE_EXE_LINKER_FLAGS="-static-libgcc -static-libstdc++" \
+              -DCMAKE_SHARED_LINKER_FLAGS="-static-libgcc -static-libstdc++" \
+              -DCMAKE_MODULE_LINKER_FLAGS="-static-libgcc -static-libstdc++" \
+              -DGGML_BACKEND_DL=ON \
+              -DGGML_NATIVE=OFF \
+              -DGGML_CPU_ALL_VARIANTS=ON \
+              -DGGML_OPENMP=OFF \
+              -DGGML_VULKAN=ON \
+              -DHF_UI_VERSION=${{ needs.get-version.outputs.ui_version }} \
+              ${{ env.CMAKE_ARGS }}
+            cmake --build build --config Release -j $(nproc)
+
+            # root wrote the build tree, let the runner user pack it
+            chmod -R a+rwX build
+          '
+
+      - name: Determine tag name
+        id: tag
+        uses: ./.github/actions/get-tag-name
+
+      - name: Pack artifacts
+        id: pack_artifacts
+        run: |
+          cp LICENSE ./build/bin/
+          tar -czvf llama-${{ steps.tag.outputs.name }}-bin-musl-vulkan-${{ matrix.build }}.tar.gz --transform "s,^\.,llama-${{ steps.tag.outputs.name }}," -C ./build/bin .
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          path: llama-${{ steps.tag.outputs.name }}-bin-musl-vulkan-${{ matrix.build }}.tar.gz
+          name: llama-bin-musl-vulkan-${{ matrix.build }}.tar.gz
+
   android-arm64:
     needs: [check-release, get-version]
     if: ${{ needs.check-release.outputs.should_release == 'true' }}
@@ -1560,6 +1695,8 @@ jobs:
       - ubuntu-22-rocm
       - ubuntu-cpu
       - ubuntu-vulkan
+      - musl-cpu
+      - musl-vulkan
       - ubuntu-24-openvino
       #- ubuntu-24-sycl
       - android-arm64
@@ -1667,6 +1804,10 @@ jobs:
             - [Ubuntu s390x (CPU)](https://github.com/ggml-org/llama.cpp/releases/download/${{ steps.tag.outputs.name }}/llama-${{ steps.tag.outputs.name }}-bin-ubuntu-s390x.tar.gz)
             - [Ubuntu x64 (Vulkan)](https://github.com/ggml-org/llama.cpp/releases/download/${{ steps.tag.outputs.name }}/llama-${{ steps.tag.outputs.name }}-bin-ubuntu-vulkan-x64.tar.gz)
             - [Ubuntu arm64 (Vulkan)](https://github.com/ggml-org/llama.cpp/releases/download/${{ steps.tag.outputs.name }}/llama-${{ steps.tag.outputs.name }}-bin-ubuntu-vulkan-arm64.tar.gz)
+            - [musl x64 (CPU)](https://github.com/ggml-org/llama.cpp/releases/download/${{ steps.tag.outputs.name }}/llama-${{ steps.tag.outputs.name }}-bin-musl-x64.tar.gz)
+            - [musl arm64 (CPU)](https://github.com/ggml-org/llama.cpp/releases/download/${{ steps.tag.outputs.name }}/llama-${{ steps.tag.outputs.name }}-bin-musl-arm64.tar.gz)
+            - [musl x64 (Vulkan)](https://github.com/ggml-org/llama.cpp/releases/download/${{ steps.tag.outputs.name }}/llama-${{ steps.tag.outputs.name }}-bin-musl-vulkan-x64.tar.gz)
+            - [musl arm64 (Vulkan)](https://github.com/ggml-org/llama.cpp/releases/download/${{ steps.tag.outputs.name }}/llama-${{ steps.tag.outputs.name }}-bin-musl-vulkan-arm64.tar.gz)
             - [Ubuntu x64 (ROCm 7.2)](https://github.com/ggml-org/llama.cpp/releases/download/${{ steps.tag.outputs.name }}/llama-${{ steps.tag.outputs.name }}-bin-ubuntu-rocm-7.2-x64.tar.gz)
             - [Ubuntu x64 (OpenVINO)](https://github.com/ggml-org/llama.cpp/releases/download/${{ steps.tag.outputs.name }}/llama-${{ steps.tag.outputs.name }}-bin-ubuntu-openvino-${{ needs.ubuntu-24-openvino.outputs.openvino_version }}-x64.tar.gz)
             - [Ubuntu x64 (SYCL FP32)](https://github.com/ggml-org/llama.cpp/releases/download/${{ steps.tag.outputs.name }}/llama-${{ steps.tag.outputs.name }}-bin-ubuntu-sycl-fp32-x64.tar.gz)
